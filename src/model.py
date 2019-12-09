@@ -1,5 +1,4 @@
-#!/usr/bin/env python
-# encoding:utf-8
+# -*- coding: utf-8 -*-
 import os
 import sys
 import getopt
@@ -23,7 +22,7 @@ from sklearn.linear_model import SGDClassifier, LogisticRegression
 from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier, \
     BaggingClassifier, ExtraTreesClassifier, GradientBoostingClassifier
 
-import easy_excel
+from src import utils
 
 
 mem = Memory("./mycache")
@@ -65,7 +64,7 @@ def arff2svm(arff_files):
         elif tpe == "libsvm":
             continue
         else:
-            print "File format error! Arff and libsvm are passed."
+            print("File format error! Arff and libsvm are passed.")
             sys.exit()
     return svm_files
 
@@ -74,7 +73,7 @@ def get_classifier(dimen, isSearch):
     if dimen > 10:
         if dimen > 50:
             dimen = 50
-        pca = map(int, np.linspace(10, dimen, dimen / 10))
+        pca = map(int, np.linspace(10, dimen, int(dimen / 10)))
     else:
         pca = [dimen]
     if isSearch:
@@ -138,7 +137,7 @@ def loop_classifier(lab, clf, train_x, train_y, test_x=None, test_y=None, cv=Non
     global results
     try:
         clf.fit(train_x, train_y)
-        print lab, "Thread: ", 'Best Param: ', clf.best_params_
+        print(lab, "Thread: ", 'Best Param: ', clf.best_params_)
         if cv is not None:
             forecast = cross_validation.cross_val_predict(clf, train_x, train_y, cv=cv)
             test_y = train_y
@@ -158,6 +157,7 @@ def loop_classifier(lab, clf, train_x, train_y, test_x=None, test_y=None, cv=Non
             roc_auc_score = '%0.4f' % metrics.roc_auc_score(test_y, forecast)
         pos = int(tp + fn)
         neg = int(fp + tn)
+        se = None
         if (tp + fp) == 0:
             precision = 1
         else:
@@ -179,7 +179,7 @@ def loop_classifier(lab, clf, train_x, train_y, test_x=None, test_y=None, cv=Non
             mcc = 1
         else:
             mcc = (tp * tn - fn * fp) / (math.sqrt((tp + fp) * (tn + fn) * (tp + fn) * (tn + fp)))
-        print lab, "Thread: ", 'Accuracy: ', ac
+        print(lab, "Thread: ", 'Accuracy: ', ac)
         # Label,Accuracy,Precision,Recall,SE,SP,GM,F_measure,F-Score,MCC,Matrix,TP,FN,FP,TN
         results.append([lab, ac, '%0.4f' % precision, '%0.4f' % recall, '%0.4f' % se, '%0.4f' % sp, '%0.4f' % gm,
                         f_measure, f_score, '%0.4f' % mcc, roc_auc_score, tp, fn, fp, tn, pos, neg]
@@ -202,7 +202,7 @@ for op, value in opts:
         input_files = input_files.replace(" ", "").split(',')
         for input_file in input_files:
             if input_file == "":
-                print "Warning: please insure no blank in your input files !"
+                print("Warning: please insure no blank in your input files !")
                 sys.exit()
     elif op == "-c":
         cv = int(value)
@@ -217,12 +217,12 @@ for op, value in opts:
         if str(value) == "0":
             isMultipleThread = False
     elif op == "-h":
-        print 'Cross-Validate: python easy_classify.py -i {input_file.libsvm} -c {int: cross validate folds}'
-        print 'Train-Test: python easy_classify.py -i {input_file.libsvm} -t {float: test size rate of file}'
-        print 'More information: https://github.com/ShixiangWan/Easy-Classify'
+        print('Cross-Validate: python easy_classify.py -i {input_file.libsvm} -c {int: cross validate folds}')
+        print('Train-Test: python easy_classify.py -i {input_file.libsvm} -t {float: test size rate of file}')
+        print('More information: https://github.com/ShixiangWan/Easy-Classify')
         sys.exit()
 
-print '*** Validating file format ...'
+print('*** Validating file format ...')
 input_files = arff2svm(input_files)
 
 experiment = ''
@@ -235,11 +235,11 @@ for input_file in input_files:
     X, y = get_data(input_file)
     X = X.todense()
     results = []
-    print '*** Time cost on loading ', input_file, ': ', clock() - sec
+    print('*** Time cost on loading ', input_file, ': ', clock() - sec)
 
     # 对数据切分或交叉验证，得出结果
     dimension = int(X.shape[1])
-    print "Dimension:", dimension
+    print("Dimension:", dimension)
     X_train, X_test, y_train, y_test = cross_validation.train_test_split(X, y, test_size=split_rate, random_state=0)
     classifiers = get_classifier(dimension, isSearch)
     threads = []
@@ -248,7 +248,7 @@ for input_file in input_files:
         grid_search = GridSearchCV(classifier2, param_grid=grid)
         if cv == 0:
             experiment = '训练测试结果'
-            print u'>>>', name, 'is training...searching best parms...'
+            print(u'>>>', name, 'is training...searching best parms...')
             if isMultipleThread:
                 new_thread = ClassifyThread(name, grid_search, X_train, y_train, test_x=X_test, test_y=y_test)
                 new_thread.start()
@@ -257,24 +257,24 @@ for input_file in input_files:
                 loop_classifier(name, grid_search, X_train, y_train, test_x=X_test, test_y=y_test)
         else:
             experiment = '交叉验证结果'
-            print u'>>>', name, 'is cross validating...searching best parms...'
+            print(u'>>>', name, 'is cross validating...searching best parms...')
             if isMultipleThread:
                 new_thread = ClassifyThread(name, grid_search, X, y, cv=cv)
                 new_thread.start()
                 threads.append(new_thread)
             else:
                 loop_classifier(name, grid_search, X, y, cv=cv)
-        print 'Time cost: ', clock() - sec
+        print('Time cost: ', clock() - sec)
     # 等待所有线程完成
     for t in threads:
         t.join()
     dimensions.append(str(dimension))
     big_results.append(results)
-print 'Time cost: ', clock() - sec
+print('Time cost: ', clock() - sec)
 
 # 保存结果至Excel
-print '====================='
-if easy_excel.save(experiment, dimensions, big_results, excel_name):
-    print 'Save excel result file successfully.'
+print('=====================')
+if utils.save(experiment, dimensions, big_results, excel_name):
+    print('Save excel result file successfully.')
 else:
-    print 'Failed. Please close excel result file first.'
+    print('Failed. Please close excel result file first.')

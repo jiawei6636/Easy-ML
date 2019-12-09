@@ -1,5 +1,51 @@
-#!/usr/bin/env python
-# encoding:utf-8
+# -*- coding: utf-8 -*-
+import xlwt
+
+def set_style(name='Times New Roman', bold=False):
+    style = xlwt.XFStyle()
+    # 设置字体（注意：在同时运行较多文件时，excel字体会报警告）
+    # font = xlwt.Font()
+    # font.name = name
+    # font.bold = bold
+    # style.font = font
+    # alignment
+    alignment = xlwt.Alignment()
+    alignment.horz = xlwt.Alignment.HORZ_LEFT
+    alignment.vert = xlwt.Alignment.VERT_CENTER
+    style.alignment = alignment
+    return style
+
+def save(experiment, dimensions, big_results, excel_name):
+    try:
+        wb = xlwt.Workbook(encoding='utf-8')
+        ws = wb.add_sheet(experiment)
+        # 写入第一行标题
+        row0 = [u'特征集', u'样本个数', u'分类器', u'Accuracy', u'Precision', u'Recall', u'SN', u'SP',
+                u'Gm', u'F_measure', u'F_score', u'MCC', u'ROC曲线面积', u'tp', u'fn', u'fp', u'tn']
+        for i in range(2, 4):
+            ws.col(i).width = 3333 * 2
+        for i in range(0, len(row0)):
+            ws.write(0, i+1, row0[i], set_style(bold=True))
+        # 写入分类结果
+        row = 1
+        for dimension, results in zip(dimensions, big_results):
+            # 合并第一列单元格，写入维度信息
+            ws.write_merge(row, row+len(results)-1, 1, 1, dimension+'D', set_style(bold=True))
+            # 合并第二列单元格，写入正反例信息
+            end = len(results[0])
+            note = u'正：'+str(results[0][end-2])+u' 反：'+str(results[0][end-1])
+            ws.write_merge(row, row+len(results)-1, 2, 2, note, set_style(bold=True))
+            for i in range(0, len(results)):
+                for j in range(0, end-2):
+                    ws.write(i+row, j+3, results[i][j], set_style())
+            row += len(results)
+        if excel_name == "":
+            excel_name = 'results.xls'
+        wb.save(excel_name)
+        return True
+    except:
+        return False
+
 import sys
 import xlwt
 import getopt
@@ -17,8 +63,6 @@ from sklearn.cross_validation import StratifiedKFold
 from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier, \
         BaggingClassifier, ExtraTreesClassifier, GradientBoostingClassifier
 from sklearn.linear_model import SGDClassifier, LogisticRegression
-
-###############################################################################
 
 mem = Memory("./mycache")
 @mem.cache
@@ -55,7 +99,7 @@ for op, value in opts:
     elif op == "-c":
         cross = int(value)
     elif op == "-h":
-        print 'command: python easy_roc.py -i {input_file.libsvm} -c {int: cross validate folds}'
+        print('command: python easy_roc.py -i {input_file.libsvm} -c {int: cross validate folds}')
         sys.exit()
 
 # input_files = ['ttt.libsvm', 'ttt2.libsvm']
@@ -67,12 +111,12 @@ for input_file in input_files:
 
     wb = xlwt.Workbook(encoding='utf-8')
     for name, classifier in get_classifier():
-        print u'>>>', name, '...',
+        print(u'>>>', name, '...',)
         cv = StratifiedKFold(y, n_folds=cross)
         # classifier = svm.SVC(kernel='linear', probability=True, random_state=0)
 
-        mean_tpr = 0.0
-        mean_fpr = np.linspace(0, 1, 100)
+        mean_tpr = [0.0]
+        mean_fpr = np.linspace(0, 1, 100).tolist()
         all_tpr = []
         all_fpr = []
         all_roc_auc = []
@@ -90,7 +134,7 @@ for input_file in input_files:
         mean_tpr[-1] = 1.0
         mean_auc = auc(mean_fpr, mean_tpr)
 
-        mean_tpr = mean_tpr.tolist()
+        mean_tpr = mean_tpr
         mean_fpr = mean_fpr.tolist()
 
         ws = wb.add_sheet(name)
@@ -112,12 +156,12 @@ for input_file in input_files:
                 ws.write(count+1, i + 1, all_tpr[num][i])
             ws.write(count + 2, 0, 'ROC Area: %0.4f' % all_roc_auc[num])
             count += 3
-        print 'OK!'
+        print('OK!')
 
     # 保存结果至Excel
-    print '====================='
+    print('=====================')
     try:
         wb.save('ROC+'+input_file+'.xls')
-        print 'Save "ROC+'+input_file+'.xls" successfully.'
+        print('Save "ROC+'+input_file+'.xls" successfully.')
     except:
-        print 'Fail to save "ROC.xls". Please close "ROC.xls" first.'
+        print('Fail to save "ROC.xls". Please close "ROC.xls" first.')
