@@ -5,13 +5,13 @@ import getopt
 import threading
 import math
 import numpy as np
+
 from time import clock
+from easyml.utils import util
 
-from sklearn.externals.joblib import Memory
-from sklearn import cross_validation, metrics
-
+from sklearn import metrics
+from sklearn.model_selection import cross_val_predict, cross_val_score, train_test_split, GridSearchCV
 from sklearn.decomposition import PCA
-from sklearn.grid_search import GridSearchCV
 from sklearn.pipeline import Pipeline
 from sklearn.svm import SVC, LinearSVC
 from sklearn.naive_bayes import BernoulliNB
@@ -21,9 +21,7 @@ from sklearn.neighbors import KNeighborsClassifier
 from sklearn.linear_model import SGDClassifier, LogisticRegression
 from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier, \
     BaggingClassifier, ExtraTreesClassifier, GradientBoostingClassifier
-
-from src import utils
-
+from sklearn.externals.joblib import Memory
 
 mem = Memory("./mycache")
 @mem.cache
@@ -139,7 +137,7 @@ def loop_classifier(lab, clf, train_x, train_y, test_x=None, test_y=None, cv=Non
         clf.fit(train_x, train_y)
         print(lab, "Thread: ", 'Best Param: ', clf.best_params_)
         if cv is not None:
-            forecast = cross_validation.cross_val_predict(clf, train_x, train_y, cv=cv)
+            forecast = cross_val_predict(clf, train_x, train_y, cv=cv)
             test_y = train_y
         else:
             forecast = clf.predict(test_x)
@@ -151,7 +149,7 @@ def loop_classifier(lab, clf, train_x, train_y, test_x=None, test_y=None, cv=Non
         ac = '%0.4f' % metrics.accuracy_score(test_y, forecast)
         fc = '%0.4f' % metrics.f1_score(test_y, forecast)
         if cv is not None:
-            roc_auc_score = '%0.4f' % cross_validation.cross_val_score(clf, train_x, train_y, scoring='roc_auc',cv=cv)\
+            roc_auc_score = '%0.4f' % cross_val_score(clf, train_x, train_y, scoring='roc_auc',cv=cv)\
                             .mean()
         else:
             roc_auc_score = '%0.4f' % metrics.roc_auc_score(test_y, forecast)
@@ -240,7 +238,7 @@ for input_file in input_files:
     # 对数据切分或交叉验证，得出结果
     dimension = int(X.shape[1])
     print("Dimension:", dimension)
-    X_train, X_test, y_train, y_test = cross_validation.train_test_split(X, y, test_size=split_rate, random_state=0)
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=split_rate, random_state=0)
     classifiers = get_classifier(dimension, isSearch)
     threads = []
     for name, classifier, grid in classifiers:
@@ -274,7 +272,7 @@ print('Time cost: ', clock() - sec)
 
 # 保存结果至Excel
 print('=====================')
-if utils.save(experiment, dimensions, big_results, excel_name):
+if util.save(experiment, dimensions, big_results, excel_name):
     print('Save excel result file successfully.')
 else:
     print('Failed. Please close excel result file first.')
