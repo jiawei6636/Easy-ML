@@ -1,30 +1,32 @@
 # -*- coding: utf-8 -*-
-import os
-import sys
+import os, sys
 import getopt
 import threading
 import math
 import numpy as np
-
 from time import clock
-from easyml.utils import util
 
 from sklearn import metrics
-from sklearn.model_selection import cross_val_predict, cross_val_score, train_test_split, GridSearchCV
-from sklearn.decomposition import PCA
 from sklearn.pipeline import Pipeline
+from sklearn.externals import joblib
+from sklearn.model_selection import cross_val_predict, cross_val_score, train_test_split, GridSearchCV
+
+from sklearn.datasets import load_svmlight_file
+from sklearn.decomposition import PCA, LatentDirichletAllocation
+
 from sklearn.svm import SVC, LinearSVC
 from sklearn.naive_bayes import BernoulliNB
-from sklearn.datasets import load_svmlight_file
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.linear_model import SGDClassifier, LogisticRegression
 from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier, \
     BaggingClassifier, ExtraTreesClassifier, GradientBoostingClassifier
-from sklearn.externals.joblib import Memory
 
-mem = Memory("./mycache")
-@mem.cache
+from easyml.utils import util
+
+
+memory = joblib.Memory("./mycache")
+@memory.cache
 def get_data(file_name):
     data = load_svmlight_file(file_name)
     return data[0], data[1]
@@ -185,94 +187,89 @@ def loop_classifier(lab, clf, train_x, train_y, test_x=None, test_y=None, cv=Non
     except Exception:
         results.append([lab, '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', ''])
 
+def main():
+    # 接收命令行参数，-i接收输入libsvm格式文件，-c接收交叉验证折数，-t接收训练集分割率
+    cv = 5
+    split_rate = 0.33
+    input_files = []
+    excel_name = ""
+    isSearch = False
+    isMultipleThread = True
+    opts, args = getopt.getopt(sys.argv[1:], "hi:c:t:o:s:m:", )
+    for op, value in opts:
+        if op == "-i":
+            input_files = str(value)
+            input_files = input_files.replace(" ", "").split(',')
+            for input_file in input_files:
+                if input_file == "":
+                    print("Warning: please insure no blank in your input files !")
+                    sys.exit()
+        elif op == "-c":
+            cv = int(value)
+        elif op == "-t":
+            split_rate = float(value)
+        elif op == "-o":
+            excel_name = str(value)
+        elif op == "-s":
+            if str(value) != "0":
+                isSearch = True
+        elif op == "-m":
+            if str(value) == "0":
+                isMultipleThread = False
+        elif op == "-h":
+            print('Cross-Validate: python easy_classify.py -i {input_file.libsvm} -c {int: cross validate folds}')
+            print('Train-Test: python easy_classify.py -i {input_file.libsvm} -t {float: test size rate of file}')
+            print('More information: https://github.com/ShixiangWan/Easy-Classify')
+            sys.exit()
 
-# 接收命令行参数，-i接收输入libsvm格式文件，-c接收交叉验证折数，-t接收训练集分割率
-cv = 5
-split_rate = 0.33
-input_files = []
-excel_name = ""
-isSearch = False
-isMultipleThread = True
-opts, args = getopt.getopt(sys.argv[1:], "hi:c:t:o:s:m:", )
-for op, value in opts:
-    if op == "-i":
-        input_files = str(value)
-        input_files = input_files.replace(" ", "").split(',')
-        for input_file in input_files:
-            if input_file == "":
-                print("Warning: please insure no blank in your input files !")
-                sys.exit()
-    elif op == "-c":
-        cv = int(value)
-    elif op == "-t":
-        split_rate = float(value)
-    elif op == "-o":
-        excel_name = str(value)
-    elif op == "-s":
-        if str(value) != "0":
-            isSearch = True
-    elif op == "-m":
-        if str(value) == "0":
-            isMultipleThread = False
-    elif op == "-h":
-        print('Cross-Validate: python easy_classify.py -i {input_file.libsvm} -c {int: cross validate folds}')
-        print('Train-Test: python easy_classify.py -i {input_file.libsvm} -t {float: test size rate of file}')
-        print('More information: https://github.com/ShixiangWan/Easy-Classify')
-        sys.exit()
+    print('*** Validating file format ...')
+    input_files = arff2svm(input_files)
 
-print('*** Validating file format ...')
-input_files = arff2svm(input_files)
-
-experiment = ''
-results = []
-dimensions = []
-big_results = []
-sec = clock()
-for input_file in input_files:
-    # 导入原始数据
-    X, y = get_data(input_file)
-    X = X.todense()
+    experiment = ''
     results = []
-    print('*** Time cost on loading ', input_file, ': ', clock() - sec)
+    dimensions = []
+    big_results = []
+    sec = clock()
+    for input_file in input_files:
+        # 导入原始数据
+        X, y = get_data(input_file)
+        X = X.todense()
+        results = []
+        print('*** Time cost on loading ', input_file, ': ', clock() - sec)
 
-    # 对数据切分或交叉验证，得出结果
-    dimension = int(X.shape[1])
-    print("Dimension:", dimension)
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=split_rate, random_state=0)
-    classifiers = get_classifier(dimension, isSearch)
-    threads = []
-    for name, classifier, grid in classifiers:
-        classifier2 = Pipeline([('pca', PCA()), ('param', classifier)])
-        grid_search = GridSearchCV(classifier2, param_grid=grid)
-        if cv == 0:
-            experiment = '训练测试结果'
-            print(u'>>>', name, 'is training...searching best parms...')
-            if isMultipleThread:
-                new_thread = ClassifyThread(name, grid_search, X_train, y_train, test_x=X_test, test_y=y_test)
-                new_thread.start()
-                threads.append(new_thread)
+        # 对数据切分或交叉验证，得出结果
+        dimension = int(X.shape[1])
+        print("Dimension:", dimension)
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=split_rate, random_state=0)
+        classifiers = get_classifier(dimension, isSearch)
+        threads = []
+        for name, classifier, grid in classifiers:
+            classifier2 = Pipeline([('pca', PCA()), ('param', classifier)])
+            grid_search = GridSearchCV(classifier2, param_grid=grid)
+            if cv == 0:
+                experiment = '训练测试结果'
+                print(u'>>>', name, 'is training...searching best parms...')
+                if isMultipleThread:
+                    new_thread = ClassifyThread(name, grid_search, X_train, y_train, test_x=X_test, test_y=y_test)
+                    new_thread.start()
+                    threads.append(new_thread)
+                else:
+                    loop_classifier(name, grid_search, X_train, y_train, test_x=X_test, test_y=y_test)
             else:
-                loop_classifier(name, grid_search, X_train, y_train, test_x=X_test, test_y=y_test)
-        else:
-            experiment = '交叉验证结果'
-            print(u'>>>', name, 'is cross validating...searching best parms...')
-            if isMultipleThread:
-                new_thread = ClassifyThread(name, grid_search, X, y, cv=cv)
-                new_thread.start()
-                threads.append(new_thread)
-            else:
-                loop_classifier(name, grid_search, X, y, cv=cv)
-        print('Time cost: ', clock() - sec)
-    # 等待所有线程完成
-    for t in threads:
-        t.join()
-    dimensions.append(str(dimension))
-    big_results.append(results)
-print('Time cost: ', clock() - sec)
+                experiment = '交叉验证结果'
+                print(u'>>>', name, 'is cross validating...searching best parms...')
+                if isMultipleThread:
+                    new_thread = ClassifyThread(name, grid_search, X, y, cv=cv)
+                    new_thread.start()
+                    threads.append(new_thread)
+                else:
+                    loop_classifier(name, grid_search, X, y, cv=cv)
+            print('Time cost: ', clock() - sec)
+        # 等待所有线程完成
+        for t in threads:
+            t.join()
+        dimensions.append(str(dimension))
+        big_results.append(results)
+    print('Time cost: ', clock() - sec)
 
-# 保存结果至Excel
-print('=====================')
-if util.save(experiment, dimensions, big_results, excel_name):
-    print('Save excel result file successfully.')
-else:
-    print('Failed. Please close excel result file first.')
+    util.save(experiment, dimensions, big_results, excel_name)
