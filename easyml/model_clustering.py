@@ -7,11 +7,9 @@ import pandas as pd
 from sklearn.manifold import TSNE
 
 def get_data():
-    data = pd.read_csv("..\\data\\fncp.csv", header=None, sep=',')
-    # label = [1] * 35 + [0] *86
-    label="."*880+"."*880
+    data = pd.read_csv('..\\data\\fncp.csv', header=None, sep=',')
+    label='.'*880+'.'*880
     n_samples, n_features = data.shape
-
     return data, label, n_samples, n_features
 
 def plot_embedding(data, label, title):
